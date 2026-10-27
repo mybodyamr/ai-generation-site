@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>لوحة المتابعة</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top"><div class="wrap nav"><span class="logo">🔒 لوحة المتابعة</span><a href="index.html">رجوع للموقع</a></div></header>
+<main><div class="wrap" id="app"></div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/content.js"></script>
+<script>
+(function () {
+  var C = window.SITE_CONFIG, app = document.getElementById("app");
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]; }); }
+  if (!C.SUPABASE_URL || !C.SUPABASE_ANON_KEY) {
+    app.innerHTML = '<div class="card"><h2>المتابعة لسه مش متفعلة</h2><p>املأ SUPABASE_URL و SUPABASE_ANON_KEY في ملف js/config.js، وشغّل ملف schema.sql. التفاصيل في README.</p></div>';
+    return;
+  }
+  var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+  var students = [], events = [];
+
+  function loginView(msg) {
+    app.innerHTML = '<div class="card" style="max-width:420px;margin:30px auto"><h2>دخول المدير</h2>' +
+      '<label>الإيميل</label><input id="em" type="email" autocomplete="username">' +
+      '<label>كلمة السر</label><input id="pw" type="password" autocomplete="current-password">' +
+      (msg ? '<p style="color:var(--bad)">' + esc(msg) + "</p>" : "") +
+      '<button class="btn" id="lg">دخول</button></div>';
+    document.getElementById("lg").onclick = function () {
+      sb.auth.signInWithPassword({ email: document.getElementById("em").value.trim(), password: document.getElementById("pw").value })
+        .then(function (r) { if (r.error) loginView("بيانات الدخول غلط"); else dash(); });
+    };
+  }
+
+  async function fetchAll(table, order) {
+    var out = [], from = 0, step = 1000;
+    while (true) {
+      var r = await sb.from(table).select("*").order(order, { ascending: false }).range(from, from + step - 1);
+      if (r.error) throw r.error;
+      out = out.concat(r.data);
+      if (r.data.length < step) break;
+      from += step;
+    }
+    return out;
+  }
+
+  async function dash() {
+    app.innerHTML = "<p>جاري التحميل...</p>";
+    try { students = await fetchAll("students", "created_at"); events = await fetchAll("events", "created_at"); }
+    catch (e) { return loginView("مفيش صلاحية. تأكد إن إيميلك هو إيميل المدير في schema.sql"); }
+    draw();
+  }
+
+  function stat(s) {
+    var ev = events.filter(function (e) { return e.student_id === s.id; });
+    var lessons = {}, exams = {}, placement = null, challenge = null, last = s.created_at;
+    ev.forEach(function (e) {
+      if (e.created_at > last) last = e.created_at;
+      if (e.kind === "lesson") lessons[e.item] = Math.max(lessons[e.item] || 0, e.score);
+      if (e.kind === "exam") exams[e.item] = Math.max(exams[e.item] || 0, e.total ? Math.round(e.score / e.total * 100) : 0);
+      if (e.kind === "placement" && placement === null) placement = e.score + "/" + e.total;
+      if (e.kind === "challenge" && challenge === null) challenge = e.score + "/" + e.total;
+    });
+    return { s: s, ev: ev, nLessons: Object.keys(lessons).length, exams: exams, placement: placement, challenge: challenge, last: last };
+  }
+
+  function draw() {
+    var rows = students.map(stat);
+    var week = Date.now() - 7 * 864e5;
+    var active = rows.filter(function (r) { return new Date(r.last).getTime() > week; }).length;
+    var goals = {}; GOALS.forEach(function (g) { goals[g.id] = 0; });
+    students.forEach(function (s) { if (goals[s.goal] != null) goals[s.goal]++; });
+    var passed = rows.filter(function (r) { return Object.keys(r.exams).some(function (k) { return r.exams[k] >= 70; }); }).length;
+
+    var h = '<div class="grid">' +
+      '<div class="card"><div class="kpi">' + students.length + "</div>طالب مسجل</div>" +
+      '<div class="card"><div class="kpi">' + active + "</div>نشط آخر 7 أيام</div>" +
+      '<div class="card"><div class="kpi">' + passed + "</div>نجحوا في امتحان مستوى</div>" +
+      '<div class="card"><div class="kpi">' + events.length + "</div>نشاط مسجل</div></div>";
+
+    h += '<div class="card"><h3>الأهداف المختارة</h3>' + GOALS.map(function (g) {
+      var n = goals[g.id], pc = students.length ? Math.round(n / students.length * 100) : 0;
+      return "<p>" + g.icon + " " + esc(g.title) + ' <b>' + n + " (" + pc + '%)</b></p><div class="bar"><i style="width:' + pc + '%"></i></div>';
+    }).join("") + "</div>";
+
+    h += '<h2>الطلاب</h2><p><button class="btn ghost" id="csv">تصدير CSV</button> <button class="btn ghost" id="out">خروج</button></p>' +
+      '<div class="tablewrap"><table><tr><th>الاسم</th><th>السن</th><th>الهدف</th><th>تحديد المستوى</th><th>دروس</th><th>امتحان 1</th><th>امتحان 2</th><th>التحدي</th><th>آخر نشاط</th><th></th></tr>' +
+      rows.map(function (r) {
+        var g = GOALS.filter(function (x) { return x.id === r.s.goal; })[0];
+        return "<tr><td>" + esc(r.s.nickname) + "</td><td>" + esc(r.s.age) + "</td><td>" + (g ? g.icon : "") + "</td><td>" + esc(r.placement || "-") + "</td><td>" + r.nLessons + "/" + LESSONS.length + "</td><td>" +
+          (r.exams.L1 != null ? r.exams.L1 + "%" : "-") + "</td><td>" + (r.exams.L2 != null ? r.exams.L2 + "%" : "-") + "</td><td>" + esc(r.challenge || "-") + "</td><td>" + new Date(r.last).toLocaleDateString("ar-EG") +
+          '</td><td><button class="btn ghost" data-id="' + esc(r.s.id) + '">تفاصيل</button></td></tr>';
+      }).join("") + "</table></div><div id=\"detail\"></div>";
+    app.innerHTML = h;
+
+    document.getElementById("out").onclick = function () { sb.auth.signOut().then(function () { loginView(); }); };
+    document.getElementById("csv").onclick = function () {
+      var lines = ["name,age,goal,placement,lessons_done,exam_L1,exam_L2,challenge,last_activity"];
+      rows.forEach(function (r) {
+        lines.push([r.s.nickname, r.s.age, r.s.goal, r.placement || "", r.nLessons, r.exams.L1 != null ? r.exams.L1 : "", r.exams.L2 != null ? r.exams.L2 : "", r.challenge || "", r.last].map(function (v) {
+          v = String(v == null ? "" : v);
+          if (/^[=+\-@]/.test(v)) v = "'" + v;   // حماية من حقن معادلات Excel
+          return '"' + v.replace(/"/g, '""') + '"';
+        }).join(","));
+      });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+      a.download = "students.csv"; a.click();
+    };
+    document.querySelectorAll("button[data-id]").forEach(function (b) {
+      b.onclick = function () {
+        var r = rows.filter(function (x) { return x.s.id === b.getAttribute("data-id"); })[0];
+        document.getElementById("detail").innerHTML = '<div class="card" style="margin-top:14px"><h3>' + esc(r.s.nickname) + "</h3>" +
+          '<div class="tablewrap"><table><tr><th>الوقت</th><th>النوع</th><th>العنصر</th><th>النتيجة</th></tr>' +
+          r.ev.map(function (e) { return "<tr><td>" + new Date(e.created_at).toLocaleString("ar-EG") + "</td><td>" + esc(e.kind) + "</td><td>" + esc(e.item) + "</td><td>" + (e.score != null ? e.score + "/" + e.total : "") + "</td></tr>"; }).join("") +
+          "</table></div></div>";
+        document.getElementById("detail").scrollIntoView({ behavior: "smooth" });
+      };
+    });
+  }
+
+  sb.auth.getSession().then(function (r) { if (r.data && r.data.session) dash(); else loginView(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+:root{--bg:#f6f8fc;--card:#fff;--ink:#14213d;--muted:#5b6785;--brand:#2563eb;--brand2:#7c3aed;--ok:#16a34a;--bad:#dc2626;--line:#e3e8f2;--r:16px}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic",Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.8;font-size:17px}
+a{color:var(--brand);text-decoration:none}
+header.top{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+.wrap{max-width:960px;margin:0 auto;padding:0 16px}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;flex-wrap:wrap}
+.logo{font-weight:800;font-size:20px;color:var(--ink)}
+.logo span{color:var(--brand)}
+.nav nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav nav a{padding:6px 12px;border-radius:999px;color:var(--muted);font-size:15px}
+.nav nav a:hover,.nav nav a.on{background:#eaf0ff;color:var(--brand)}
+main{padding:24px 0 60px;min-height:70vh}
+.hero{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-radius:24px;padding:40px 24px;text-align:center}
+.hero h1{margin:0 0 8px;font-size:32px;line-height:1.4}
+.hero p{margin:0 auto 20px;max-width:560px;opacity:.95}
+.btn{display:inline-block;border:0;cursor:pointer;background:var(--brand);color:#fff;padding:12px 22px;border-radius:12px;font-size:16px;font-family:inherit;font-weight:700}
+.btn:hover{filter:brightness(1.08)}
+.btn.light{background:#fff;color:var(--brand)}
+.btn.ghost{background:#eaf0ff;color:var(--brand)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin:20px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.card h3{margin:0 0 6px}
+.card.click{cursor:pointer;transition:.15s}
+.card.click:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(20,33,61,.08)}
+.stats{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+.stat{background:rgba(255,255,255,.18);padding:8px 16px;border-radius:12px}
+h2{margin:28px 0 10px}
+.tag{display:inline-block;background:#eaf0ff;color:var(--brand);border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700}
+.tag.done{background:#dcfce7;color:var(--ok)}
+.tag.rec{background:#fef3c7;color:#b45309}
+.lesson h2{margin-top:24px}
+.lesson .box{background:#f0f6ff;border-right:4px solid var(--brand);padding:12px 16px;border-radius:10px;margin:14px 0}
+.lesson .warn{background:#fff4f4;border-right-color:var(--bad)}
+.lesson ul{padding-right:22px}
+.opt{display:block;width:100%;text-align:right;background:#fff;border:2px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0;font-family:inherit;font-size:16px;cursor:pointer}
+.opt:hover{border-color:var(--brand)}
+.opt.right{border-color:var(--ok);background:#f0fdf4}
+.opt.wrong{border-color:var(--bad);background:#fef2f2}
+.explain{background:#f8fafc;border:1px dashed var(--line);border-radius:12px;padding:10px 14px;margin:10px 0}
+.bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:12px 0}
+.bar i{display:block;height:100%;background:var(--brand);transition:.3s}
+input,select{font-family:inherit;font-size:16px;padding:11px 12px;border:2px solid var(--line);border-radius:12px;width:100%;margin:6px 0 12px;background:#fff}
+label{font-weight:700}
+.note{color:var(--muted);font-size:14px}
+.center{text-align:center}
+.cert{background:#fff;border:6px double var(--brand);border-radius:18px;padding:40px 20px;text-align:center;max-width:680px;margin:20px auto}
+.cert h1{color:var(--brand);margin:0}
+.cert .name{font-size:34px;font-weight:800;margin:14px 0}
+footer{border-top:1px solid var(--line);padding:18px 0;color:var(--muted);font-size:14px;text-align:center}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right;font-size:15px}
+th{background:#f1f5fb}
+.tablewrap{overflow-x:auto}
+.kpi{font-size:30px;font-weight:800;color:var(--brand)}
+@media print{header.top,footer,.noprint{display:none!important}body{background:#fff}}
+@media(max-width:560px){.hero h1{font-size:25px}body{font-size:16px}}
