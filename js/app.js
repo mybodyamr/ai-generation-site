@@ -46,6 +46,11 @@
   function lessonById(id) { return LESSONS.filter(function (l) { return l.id === id; })[0]; }
   function lessonsOf(lv) { return LESSONS.filter(function (l) { return l.level === lv; }); }
   function goalById(id) { return GOALS.filter(function (g) { return g.id === id; })[0]; }
+  function levelsList() {
+    var set = {}; LESSONS.forEach(function (l) { set[l.level] = 1; });
+    return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
+  }
+  function levelInfo(lv) { return LEVELS[lv] || { title: "المستوى " + lv, desc: "" }; }
   function doneCount(lv) { return lessonsOf(lv).filter(function (l) { return S.lessons[l.id]; }).length; }
   function render(html) { app.innerHTML = html; window.scrollTo(0, 0); }
   function go(h) { location.hash = h; }
@@ -134,7 +139,7 @@
         S.level = c >= 6 ? 2 : 1; S.placementDone = true; save();
         track("placement", "score", c, t);
         var g = goalById(S.goal);
-        render('<div class="card center"><h2>نتيجتك: ' + c + " من " + t + '</h2><p>هنبدأ بيك من <b>' + esc(LEVELS[S.level].title) + '</b>.</p><p>وعشان هدفك "<b>' + esc(g.title) + '</b>"، اقتراحنا تبدأ بدرس: <b>' + esc(lessonById(g.start).title) + '</b></p><a class="btn" href="#/lesson/' + g.start + '">ابدأ الدرس</a> <a class="btn ghost" href="#/path">شوف كل الدروس</a></div>');
+        render('<div class="card center"><h2>نتيجتك: ' + c + " من " + t + '</h2><p>هنبدأ بيك من <b>' + esc(levelInfo(S.level).title) + '</b>.</p><p>وعشان هدفك "<b>' + esc(g.title) + '</b>"، اقتراحنا تبدأ بدرس: <b>' + esc(lessonById(g.start).title) + '</b></p><a class="btn" href="#/lesson/' + g.start + '">ابدأ الدرس</a> <a class="btn ghost" href="#/path">شوف كل الدروس</a></div>');
       });
     };
   };
@@ -143,9 +148,9 @@
     if (!S.id) return go("#/start");
     var g = goalById(S.goal) || { start: "L1-what" };
     var h = '<h2>رحلتك، يا ' + esc(S.name) + "</h2>";
-    [1, 2].forEach(function (lv) {
+    levelsList().forEach(function (lv) {
       var ls = lessonsOf(lv), dc = doneCount(lv);
-      h += '<div class="card" style="margin:14px 0"><h3>' + esc(LEVELS[lv].title) + '</h3><p class="note">' + esc(LEVELS[lv].desc) + "</p>" +
+      h += '<div class="card" style="margin:14px 0"><h3>' + esc(levelInfo(lv).title) + '</h3><p class="note">' + esc(levelInfo(lv).desc) + "</p>" +
         '<div class="bar"><i style="width:' + Math.round(dc / ls.length * 100) + '%"></i></div>';
       ls.forEach(function (l) {
         var tags = (S.lessons[l.id] ? '<span class="tag done">تم ✓</span> ' : "") + (l.id === g.start && !S.lessons[l.id] ? '<span class="tag rec">مقترح ليك</span> ' : "");
@@ -155,7 +160,7 @@
       h += '<p><a class="btn ' + (ex && ex.passed ? "ghost" : "") + '" href="#/exam/' + lv + '">' + (ex && ex.passed ? "أعد الامتحان" : "امتحان نهاية المستوى") + "</a> " +
         (ex && ex.passed ? '<a class="btn" href="#/cert/' + lv + '">🎓 شهادتك</a> <span class="tag done">نجحت ' + ex.score + "/" + ex.total + "</span>" : "") + "</p></div>";
     });
-    h += '<div class="card"><h3>المستوى الثالث: مشروع صغير</h3><p class="note">قريباً. هنبني فيه مشروع من بلدك بالـ AI.</p></div>';
+    if (levelsList().indexOf(3) < 0) h += '<div class="card"><h3>المستوى الثالث: مشروع صغير</h3><p class="note">قريباً. هنبني فيه مشروع من بلدك بالـ AI.</p></div>';
     h += '<p class="center"><a class="btn ghost" href="#/challenge">🕵️ جرّب تحدي المفبرك</a></p>';
     render(h);
   };
@@ -186,7 +191,7 @@
     var pool = [];
     lessonsOf(lv).forEach(function (l) { pool = pool.concat(l.quiz); });
     var qs = shuffle(pool).slice(0, 10);
-    render('<div class="card"><h2>' + esc(LEVELS[lv].title) + "</h2><p>امتحان نهاية المستوى. النجاح من 70%. ده للتعلم، مش امتحان رسمي.</p><div id=\"qz\"><button class=\"btn\" id=\"b\">ابدأ</button></div></div>");
+    render('<div class="card"><h2>' + esc(levelInfo(lv).title) + "</h2><p>امتحان نهاية المستوى. النجاح من 70%. ده للتعلم، مش امتحان رسمي.</p><div id=\"qz\"><button class=\"btn\" id=\"b\">ابدأ</button></div></div>");
     $("#b").onclick = function () {
       runQuiz($("#qz"), qs, function (c, t) {
         var passed = c / t >= 0.7;
@@ -203,7 +208,7 @@
     lv = +lv; var ex = S.exams[lv];
     if (!ex || !ex.passed) return go("#/path");
     var d = new Date(ex.at).toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" });
-    render('<div class="cert"><h1>🎓 شهادة إتمام</h1><p>تشهد ' + esc(C.SITE_NAME) + " بأن</p><div class=\"name\">" + esc(S.name) + "</div><p>أتمّ بنجاح</p><h2>" + esc(LEVELS[lv].title) + "</h2><p>بنتيجة " + ex.score + " من " + ex.total + " • " + d + '</p><p class="note">شهادة إتمام من مشروع مجتمعي تعليمي. غير معتمدة رسمياً.</p></div><p class="center noprint"><button class="btn" onclick="window.print()">اطبع / احفظ PDF</button> <a class="btn ghost" href="#/path">رجوع</a></p>');
+    render('<div class="cert"><h1>🎓 شهادة إتمام</h1><p>تشهد ' + esc(C.SITE_NAME) + " بأن</p><div class=\"name\">" + esc(S.name) + "</div><p>أتمّ بنجاح</p><h2>" + esc(levelInfo(lv).title) + "</h2><p>بنتيجة " + ex.score + " من " + ex.total + " • " + d + '</p><p class="note">شهادة إتمام من مشروع مجتمعي تعليمي. غير معتمدة رسمياً.</p></div><p class="center noprint"><button class="btn" onclick="window.print()">اطبع / احفظ PDF</button> <a class="btn ghost" href="#/path">رجوع</a></p>');
     track("cert", "L" + lv, ex.score, ex.total);
   };
 
@@ -245,4 +250,28 @@
   window.addEventListener("hashchange", route);
   $("#sname").textContent = C.SITE_NAME;
   route();
+
+  /* دروس مضافة من لوحة الإدارة (Supabase). لو فشل التحميل، الدروس الأساسية تكفي */
+  function validQuiz(q) {
+    if (!Array.isArray(q)) return [];
+    return q.filter(function (x) {
+      return x && typeof x.q === "string" && Array.isArray(x.o) && x.o.length >= 2 && x.o.length <= 4 &&
+        Number.isInteger(x.a) && x.a >= 0 && x.a < x.o.length;
+    }).map(function (x) { return { q: x.q, o: x.o.map(String), a: x.a, e: String(x.e || "") }; });
+  }
+  if (sb) {
+    sb.from("lessons").select("*").eq("published", true).order("level").order("sort").order("created_at").then(function (r) {
+      if (r.error || !r.data) return;
+      var rows = r.data.map(function (d) {
+        return { id: d.id, level: d.level, title: d.title, mins: d.mins || 5, html: window.renderMarkup(d.body), tryIt: d.try_it || "", quiz: validQuiz(d.quiz), db: true };
+      }).filter(function (l) { return l.quiz.length; });
+      var base = LESSONS.filter(function (l) { return !l.db; });
+      LESSONS.length = 0;
+      base.concat(rows).map(function (l, i) { return { l: l, i: i }; })
+        .sort(function (a, b) { return a.l.level - b.l.level || a.i - b.i; })
+        .forEach(function (x) { LESSONS.push(x.l); });
+      var cur = (location.hash || "#/").replace(/^#\/?/, "").split("/")[0] || "home";
+      if (cur === "path" || cur === "home" || (cur === "lesson" && !document.querySelector(".lesson"))) route();
+    }, function () {});
+  }
 })();

@@ -4,42 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>لوحة المتابعة</title>
+<title>لوحة الإدارة</title>
 <link rel="stylesheet" href="css/style.css">
+<style>
+.tabs{display:flex;gap:8px;margin:0 0 18px;flex-wrap:wrap}
+.tabs button{border:0;background:#eaf0ff;color:var(--brand);padding:9px 18px;border-radius:999px;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer}
+.tabs button.on{background:var(--brand);color:#fff}
+textarea{font-family:inherit;font-size:16px;padding:11px 12px;border:2px solid var(--line);border-radius:12px;width:100%;margin:6px 0 12px;background:#fff;min-height:160px;resize:vertical;line-height:1.7}
+.two{display:grid;gap:16px;grid-template-columns:1fr 1fr}
+@media(max-width:760px){.two{grid-template-columns:1fr}}
+.qblock{border:2px solid var(--line);border-radius:14px;padding:12px;margin:10px 0;background:#fcfdff}
+.qblock .row{display:flex;gap:8px;align-items:center}
+.qblock .row input[type=text]{margin:4px 0}
+.qblock .row input[type=radio]{width:auto;margin:0}
+.preview{border:2px dashed var(--line);border-radius:12px;padding:6px 14px;min-height:160px;background:#fff}
+.lrow{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:10px 0}
+.msg{padding:10px 14px;border-radius:10px;margin:10px 0}
+.msg.ok{background:#dcfce7;color:#166534}.msg.err{background:#fee2e2;color:#991b1b}
+.small{padding:6px 12px;font-size:14px}
+</style>
 </head>
 <body>
-<header class="top"><div class="wrap nav"><span class="logo">🔒 لوحة المتابعة</span><a href="index.html">رجوع للموقع</a></div></header>
+<header class="top"><div class="wrap nav"><span class="logo">🔒 لوحة الإدارة</span><a href="index.html">رجوع للموقع</a></div></header>
 <main><div class="wrap" id="app"></div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/config.js"></script>
 <script src="js/content.js"></script>
+<script src="js/markup.js"></script>
 <script>
 (function () {
   var C = window.SITE_CONFIG, app = document.getElementById("app");
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]; }); }
+  function $(s) { return document.querySelector(s); }
   if (!C.SUPABASE_URL || !C.SUPABASE_ANON_KEY) {
-    app.innerHTML = '<div class="card"><h2>المتابعة لسه مش متفعلة</h2><p>املأ SUPABASE_URL و SUPABASE_ANON_KEY في ملف js/config.js، وشغّل ملف schema.sql. التفاصيل في README.</p></div>';
+    app.innerHTML = '<div class="card"><h2>الإدارة لسه مش متفعلة</h2><p>املأ SUPABASE_URL و SUPABASE_ANON_KEY في ملف js/config.js، وشغّل schema.sql ثم schema_lessons.sql. التفاصيل في README.</p></div>';
     return;
   }
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
-  var students = [], events = [];
+  var students = [], events = [], dbLessons = [], tab = "track", editing = null;
 
+  /* ---------- دخول ---------- */
   function loginView(msg) {
     app.innerHTML = '<div class="card" style="max-width:420px;margin:30px auto"><h2>دخول المدير</h2>' +
       '<label>الإيميل</label><input id="em" type="email" autocomplete="username">' +
       '<label>كلمة السر</label><input id="pw" type="password" autocomplete="current-password">' +
       (msg ? '<p style="color:var(--bad)">' + esc(msg) + "</p>" : "") +
       '<button class="btn" id="lg">دخول</button></div>';
-    document.getElementById("lg").onclick = function () {
-      sb.auth.signInWithPassword({ email: document.getElementById("em").value.trim(), password: document.getElementById("pw").value })
-        .then(function (r) { if (r.error) loginView("بيانات الدخول غلط"); else dash(); });
+    $("#lg").onclick = function () {
+      sb.auth.signInWithPassword({ email: $("#em").value.trim(), password: $("#pw").value })
+        .then(function (r) { if (r.error) loginView("بيانات الدخول غلط"); else boot(); });
     };
   }
 
-  async function fetchAll(table, order) {
+  async function fetchAll(table, order, asc) {
     var out = [], from = 0, step = 1000;
     while (true) {
-      var r = await sb.from(table).select("*").order(order, { ascending: false }).range(from, from + step - 1);
+      var r = await sb.from(table).select("*").order(order, { ascending: !!asc }).range(from, from + step - 1);
       if (r.error) throw r.error;
       out = out.concat(r.data);
       if (r.data.length < step) break;
@@ -48,12 +68,26 @@
     return out;
   }
 
-  async function dash() {
+  async function boot() {
     app.innerHTML = "<p>جاري التحميل...</p>";
-    try { students = await fetchAll("students", "created_at"); events = await fetchAll("events", "created_at"); }
-    catch (e) { return loginView("مفيش صلاحية. تأكد إن إيميلك هو إيميل المدير في schema.sql"); }
-    draw();
+    try {
+      students = await fetchAll("students", "created_at");
+      events = await fetchAll("events", "created_at");
+    } catch (e) { return loginView("مفيش صلاحية. تأكد إن إيميلك هو إيميل المدير في schema.sql"); }
+    try { dbLessons = await fetchAll("lessons", "created_at", true); } catch (e) { dbLessons = []; }
+    shell();
   }
+
+  function shell(msg) {
+    app.innerHTML = '<div class="tabs"><button data-t="track" class="' + (tab === "track" ? "on" : "") + '">📊 المتابعة</button><button data-t="lessons" class="' + (tab === "lessons" ? "on" : "") + '">✍️ الدروس</button><button id="out">خروج</button></div>' +
+      (msg ? '<div class="msg ' + msg.k + '">' + esc(msg.t) + "</div>" : "") + '<div id="pane"></div>';
+    document.querySelectorAll(".tabs button[data-t]").forEach(function (b) { b.onclick = function () { tab = b.getAttribute("data-t"); editing = null; shell(); }; });
+    $("#out").onclick = function () { sb.auth.signOut().then(function () { loginView(); }); };
+    if (tab === "track") trackView(); else lessonsView();
+  }
+
+  /* ---------- المتابعة ---------- */
+  function lessonTotal() { return LESSONS.length + dbLessons.filter(function (l) { return l.published; }).length; }
 
   function stat(s) {
     var ev = events.filter(function (e) { return e.student_id === s.id; });
@@ -68,9 +102,8 @@
     return { s: s, ev: ev, nLessons: Object.keys(lessons).length, exams: exams, placement: placement, challenge: challenge, last: last };
   }
 
-  function draw() {
-    var rows = students.map(stat);
-    var week = Date.now() - 7 * 864e5;
+  function trackView() {
+    var rows = students.map(stat), week = Date.now() - 7 * 864e5;
     var active = rows.filter(function (r) { return new Date(r.last).getTime() > week; }).length;
     var goals = {}; GOALS.forEach(function (g) { goals[g.id] = 0; });
     students.forEach(function (s) { if (goals[s.goal] != null) goals[s.goal]++; });
@@ -81,29 +114,27 @@
       '<div class="card"><div class="kpi">' + active + "</div>نشط آخر 7 أيام</div>" +
       '<div class="card"><div class="kpi">' + passed + "</div>نجحوا في امتحان مستوى</div>" +
       '<div class="card"><div class="kpi">' + events.length + "</div>نشاط مسجل</div></div>";
-
     h += '<div class="card"><h3>الأهداف المختارة</h3>' + GOALS.map(function (g) {
       var n = goals[g.id], pc = students.length ? Math.round(n / students.length * 100) : 0;
-      return "<p>" + g.icon + " " + esc(g.title) + ' <b>' + n + " (" + pc + '%)</b></p><div class="bar"><i style="width:' + pc + '%"></i></div>';
+      return "<p>" + g.icon + " " + esc(g.title) + " <b>" + n + " (" + pc + '%)</b></p><div class="bar"><i style="width:' + pc + '%"></i></div>';
     }).join("") + "</div>";
-
-    h += '<h2>الطلاب</h2><p><button class="btn ghost" id="csv">تصدير CSV</button> <button class="btn ghost" id="out">خروج</button></p>' +
-      '<div class="tablewrap"><table><tr><th>الاسم</th><th>السن</th><th>الهدف</th><th>تحديد المستوى</th><th>دروس</th><th>امتحان 1</th><th>امتحان 2</th><th>التحدي</th><th>آخر نشاط</th><th></th></tr>' +
+    h += '<h2>الطلاب</h2><p><button class="btn ghost" id="csv">تصدير CSV</button></p>' +
+      '<div class="tablewrap"><table><tr><th>الاسم</th><th>السن</th><th>الهدف</th><th>تحديد المستوى</th><th>دروس</th><th>امتحان 1</th><th>امتحان 2</th><th>امتحان 3</th><th>التحدي</th><th>آخر نشاط</th><th></th></tr>' +
       rows.map(function (r) {
         var g = GOALS.filter(function (x) { return x.id === r.s.goal; })[0];
-        return "<tr><td>" + esc(r.s.nickname) + "</td><td>" + esc(r.s.age) + "</td><td>" + (g ? g.icon : "") + "</td><td>" + esc(r.placement || "-") + "</td><td>" + r.nLessons + "/" + LESSONS.length + "</td><td>" +
-          (r.exams.L1 != null ? r.exams.L1 + "%" : "-") + "</td><td>" + (r.exams.L2 != null ? r.exams.L2 + "%" : "-") + "</td><td>" + esc(r.challenge || "-") + "</td><td>" + new Date(r.last).toLocaleDateString("ar-EG") +
-          '</td><td><button class="btn ghost" data-id="' + esc(r.s.id) + '">تفاصيل</button></td></tr>';
-      }).join("") + "</table></div><div id=\"detail\"></div>";
-    app.innerHTML = h;
+        function ex(k) { return r.exams[k] != null ? r.exams[k] + "%" : "-"; }
+        return "<tr><td>" + esc(r.s.nickname) + "</td><td>" + esc(r.s.age) + "</td><td>" + (g ? g.icon : "") + "</td><td>" + esc(r.placement || "-") + "</td><td>" + r.nLessons + "/" + lessonTotal() + "</td><td>" +
+          ex("L1") + "</td><td>" + ex("L2") + "</td><td>" + ex("L3") + "</td><td>" + esc(r.challenge || "-") + "</td><td>" + new Date(r.last).toLocaleDateString("ar-EG") +
+          '</td><td><button class="btn ghost small" data-id="' + esc(r.s.id) + '">تفاصيل</button></td></tr>';
+      }).join("") + '</table></div><div id="detail"></div>';
+    $("#pane").innerHTML = h;
 
-    document.getElementById("out").onclick = function () { sb.auth.signOut().then(function () { loginView(); }); };
-    document.getElementById("csv").onclick = function () {
-      var lines = ["name,age,goal,placement,lessons_done,exam_L1,exam_L2,challenge,last_activity"];
+    $("#csv").onclick = function () {
+      var lines = ["name,age,goal,placement,lessons_done,exam_L1,exam_L2,exam_L3,challenge,last_activity"];
       rows.forEach(function (r) {
-        lines.push([r.s.nickname, r.s.age, r.s.goal, r.placement || "", r.nLessons, r.exams.L1 != null ? r.exams.L1 : "", r.exams.L2 != null ? r.exams.L2 : "", r.challenge || "", r.last].map(function (v) {
+        lines.push([r.s.nickname, r.s.age, r.s.goal, r.placement || "", r.nLessons, r.exams.L1, r.exams.L2, r.exams.L3, r.challenge || "", r.last].map(function (v) {
           v = String(v == null ? "" : v);
-          if (/^[=+\-@]/.test(v)) v = "'" + v;   // حماية من حقن معادلات Excel
+          if (/^[=+\-@]/.test(v)) v = "'" + v;
           return '"' + v.replace(/"/g, '""') + '"';
         }).join(","));
       });
@@ -114,16 +145,116 @@
     document.querySelectorAll("button[data-id]").forEach(function (b) {
       b.onclick = function () {
         var r = rows.filter(function (x) { return x.s.id === b.getAttribute("data-id"); })[0];
-        document.getElementById("detail").innerHTML = '<div class="card" style="margin-top:14px"><h3>' + esc(r.s.nickname) + "</h3>" +
+        $("#detail").innerHTML = '<div class="card" style="margin-top:14px"><h3>' + esc(r.s.nickname) + "</h3>" +
           '<div class="tablewrap"><table><tr><th>الوقت</th><th>النوع</th><th>العنصر</th><th>النتيجة</th></tr>' +
-          r.ev.map(function (e) { return "<tr><td>" + new Date(e.created_at).toLocaleString("ar-EG") + "</td><td>" + esc(e.kind) + "</td><td>" + esc(e.item) + "</td><td>" + (e.score != null ? e.score + "/" + e.total : "") + "</td></tr>"; }).join("") +
-          "</table></div></div>";
-        document.getElementById("detail").scrollIntoView({ behavior: "smooth" });
+          r.ev.map(function (e) { return "<tr><td>" + new Date(e.created_at).toLocaleString("ar-EG") + "</td><td>" + esc(e.kind) + "</td><td>" + esc(e.item) + "</td><td>" + (e.score != null ? e.score + "/" + e.total : "") + "</td></tr>"; }).join("") + "</table></div></div>";
+        $("#detail").scrollIntoView({ behavior: "smooth" });
       };
     });
   }
 
-  sb.auth.getSession().then(function (r) { if (r.data && r.data.session) dash(); else loginView(); });
+  /* ---------- الدروس ---------- */
+  function lessonsView() {
+    if (editing) return editorView();
+    var h = '<p><button class="btn" id="new">➕ درس جديد</button></p>';
+    if (!dbLessons.length) h += '<div class="card"><p>لسه ما أضفتش دروس. الدروس الأساسية (' + LESSONS.length + ') موجودة في الموقع، وأي درس تضيفه هنا بيظهر للطلاب تلقائياً.</p></div>';
+    else h += '<div class="card"><h3>الدروس اللي أضفتها</h3>' + dbLessons.map(function (l) {
+      return '<div class="lrow"><div><b>' + esc(l.title) + '</b> <span class="tag">مستوى ' + l.level + '</span> ' + (l.published ? '<span class="tag done">منشور</span>' : '<span class="tag rec">مسودة</span>') +
+        ' <span class="note">' + (Array.isArray(l.quiz) ? l.quiz.length : 0) + ' أسئلة</span></div><div>' +
+        '<button class="btn ghost small" data-e="' + esc(l.id) + '">تعديل</button> <button class="btn ghost small" data-p="' + esc(l.id) + '">' + (l.published ? "إخفاء" : "نشر") + '</button> <button class="btn ghost small" data-d="' + esc(l.id) + '">حذف</button></div></div>';
+    }).join("") + "</div>";
+    $("#pane").innerHTML = h;
+    $("#new").onclick = function () { editing = { id: null, level: 1, title: "", mins: 5, body: "", try_it: "", quiz: [], published: true }; shell(); };
+    function byId(id) { return dbLessons.filter(function (l) { return l.id === id; })[0]; }
+    document.querySelectorAll("[data-e]").forEach(function (b) { b.onclick = function () { editing = JSON.parse(JSON.stringify(byId(b.getAttribute("data-e")))); shell(); }; });
+    document.querySelectorAll("[data-p]").forEach(function (b) {
+      b.onclick = async function () {
+        var l = byId(b.getAttribute("data-p"));
+        var r = await sb.from("lessons").update({ published: !l.published, updated_at: new Date().toISOString() }).eq("id", l.id);
+        if (r.error) return shell({ k: "err", t: "فشل التحديث: " + r.error.message });
+        l.published = !l.published; shell({ k: "ok", t: l.published ? "اتنشر الدرس" : "اتخفى الدرس" });
+      };
+    });
+    document.querySelectorAll("[data-d]").forEach(function (b) {
+      b.onclick = async function () {
+        var l = byId(b.getAttribute("data-d"));
+        if (!confirm("حذف الدرس \"" + l.title + "\" نهائياً؟")) return;
+        var r = await sb.from("lessons").delete().eq("id", l.id);
+        if (r.error) return shell({ k: "err", t: "فشل الحذف: " + r.error.message });
+        dbLessons = dbLessons.filter(function (x) { return x.id !== l.id; }); shell({ k: "ok", t: "اتحذف الدرس" });
+      };
+    });
+  }
+
+  function qBlock(q, n) {
+    q = q || { q: "", o: ["", "", "", ""], a: 0, e: "" };
+    var o = q.o.slice(); while (o.length < 4) o.push("");
+    return '<div class="qblock" data-q><b>سؤال</b> <button class="btn ghost small" data-rm style="float:left">حذف السؤال</button>' +
+      '<input type="text" data-qt placeholder="نص السؤال" value="' + esc(q.q) + '">' +
+      o.map(function (t, i) {
+        return '<div class="row"><input type="radio" name="c' + n + '" value="' + i + '"' + (q.a === i ? " checked" : "") + '><input type="text" data-o placeholder="' + (i < 2 ? "اختيار " + (i + 1) + " (مطلوب)" : "اختيار " + (i + 1) + " (اختياري)") + '" value="' + esc(t) + '"></div>';
+      }).join("") +
+      '<p class="note" style="margin:2px 0">الدايرة جنب الإجابة الصح</p>' +
+      '<input type="text" data-qe placeholder="شرح بيظهر بعد الإجابة (اختياري)" value="' + esc(q.e || "") + '"></div>';
+  }
+
+  function editorView() {
+    var l = editing, qn = 0;
+    $("#pane").innerHTML =
+      '<div class="card"><h2>' + (l.id ? "تعديل درس" : "درس جديد") + "</h2>" +
+      '<label>عنوان الدرس</label><input id="lt" maxlength="120" value="' + esc(l.title) + '" placeholder="مثلاً: فن السؤال: إزاي تطلب صح">' +
+      '<div class="two"><div><label>المستوى</label><select id="ll">' + [1, 2, 3, 4, 5].map(function (n) { return '<option value="' + n + '"' + (l.level === n ? " selected" : "") + ">المستوى " + n + "</option>"; }).join("") + '</select></div>' +
+      '<div><label>مدة القراءة (دقايق)</label><input id="lm" type="number" min="1" max="60" value="' + esc(l.mins) + '"></div></div>' +
+      '<label>محتوى الدرس</label><p class="note">اكتب أو الصق النص. <b>## عنوان</b> • <b>* نقطة</b> • <b>1. خطوة</b> • <b>&gt; مربع معلومة</b> • <b>!&gt; مربع تحذير</b> • <b>**غامق**</b> • سطر فاضي = فقرة جديدة. <button class="btn ghost small" id="tpl" type="button">حط قالب جاهز</button></p>' +
+      '<div class="two"><textarea id="lb" placeholder="اكتب الدرس هنا">' + esc(l.body) + '</textarea><div><div class="note">معاينة:</div><div class="preview lesson" id="lp"></div></div></div>' +
+      '<label>🧪 جرّب بنفسك (تمرين عملي)</label><textarea id="lx" style="min-height:70px">' + esc(l.try_it || "") + "</textarea>" +
+      '<h3>الاختبار السريع (سؤال واحد على الأقل)</h3><div id="qs">' + (l.quiz && l.quiz.length ? l.quiz.map(function (q) { return qBlock(q, qn++); }).join("") : qBlock(null, qn++)) + "</div>" +
+      '<p><button class="btn ghost" id="aq" type="button">➕ سؤال تاني</button></p>' +
+      '<label style="font-weight:400"><input type="checkbox" id="lpub" style="width:auto;margin-left:8px"' + (l.published ? " checked" : "") + '>منشور (يظهر للطلاب)</label><br>' +
+      '<button class="btn" id="sv">حفظ الدرس</button> <button class="btn ghost" id="cn">إلغاء</button><div id="em2"></div></div>';
+
+    function prev() { $("#lp").innerHTML = window.renderMarkup($("#lb").value) || '<p class="note">المعاينة هتظهر هنا</p>'; }
+    $("#lb").oninput = prev; prev();
+    $("#tpl").onclick = function () { if (!$("#lb").value.trim() || confirm("ده هيمسح النص الحالي. متأكد؟")) { $("#lb").value = window.MARKUP_TEMPLATE; prev(); } };
+    function bindRm() { document.querySelectorAll("[data-rm]").forEach(function (b) { b.onclick = function () { b.closest("[data-q]").remove(); }; }); }
+    bindRm();
+    $("#aq").onclick = function () { $("#qs").insertAdjacentHTML("beforeend", qBlock(null, qn++)); bindRm(); };
+    $("#cn").onclick = function () { editing = null; shell(); };
+
+    $("#sv").onclick = async function () {
+      var err = [], quiz = [];
+      var title = $("#lt").value.trim(), body = $("#lb").value.trim();
+      if (!title) err.push("اكتب عنوان الدرس");
+      if (!body) err.push("اكتب محتوى الدرس");
+      document.querySelectorAll("[data-q]").forEach(function (b, idx) {
+        var qt = b.querySelector("[data-qt]").value.trim();
+        var opts = [].map.call(b.querySelectorAll("[data-o]"), function (i) { return i.value.trim(); });
+        var checked = b.querySelector('input[type=radio]:checked'), a = checked ? +checked.value : 0;
+        if (!qt && !opts.some(Boolean)) return;
+        var map = [], newA = -1;
+        opts.forEach(function (t, i) { if (t) { if (i === a) newA = map.length; map.push(t); } });
+        if (!qt) return err.push("سؤال " + (idx + 1) + ": اكتب نص السؤال");
+        if (map.length < 2) return err.push("سؤال " + (idx + 1) + ": محتاج اختيارين على الأقل");
+        if (newA < 0) return err.push("سؤال " + (idx + 1) + ": علّم الإجابة الصح على اختيار مكتوب");
+        quiz.push({ q: qt, o: map, a: newA, e: b.querySelector("[data-qe]").value.trim() });
+      });
+      if (!quiz.length && !err.length) err.push("أضف سؤال واحد على الأقل");
+      if (err.length) { $("#em2").innerHTML = '<div class="msg err">' + err.map(esc).join("<br>") + "</div>"; return; }
+      var row = {
+        id: l.id || ("c" + Date.now().toString(36)), level: +$("#ll").value, title: title, mins: Math.max(1, Math.min(60, +$("#lm").value || 5)),
+        body: body, try_it: $("#lx").value.trim(), quiz: quiz, published: $("#lpub").checked, updated_at: new Date().toISOString()
+      };
+      if (!l.id) row.sort = dbLessons.length;
+      var r = await sb.from("lessons").upsert(row);
+      if (r.error) { $("#em2").innerHTML = '<div class="msg err">فشل الحفظ: ' + esc(r.error.message) + "<br>اتأكد إنك شغلت schema_lessons.sql</div>"; return; }
+      var i = dbLessons.findIndex(function (x) { return x.id === row.id; });
+      var full = Object.assign({}, dbLessons[i] || {}, row);
+      if (i >= 0) dbLessons[i] = full; else dbLessons.push(full);
+      editing = null; shell({ k: "ok", t: "اتحفظ الدرس" + (row.published ? " وبقى ظاهر للطلاب" : " كمسودة") });
+    };
+  }
+
+  sb.auth.getSession().then(function (r) { if (r.data && r.data.session) boot(); else loginView(); });
 })();
 </script>
 </body>
